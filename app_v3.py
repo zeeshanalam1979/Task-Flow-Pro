@@ -284,8 +284,8 @@ def db_delete_task(tid):
     else: _db()["tasks"] = [t for t in _db()["tasks"] if t["id"]!=tid]; _flush()
 
 def seed_projects(uid_):
-    for n,c in [("Cloud Wholesale SEO","#0052cc"),("iPuff24 Shopify SEO","#5e35b1"),("General","#2e7d32")]:
-        db_add_project({"id":uid(),"user_id":uid_,"name":n,"color":c,"created_at":now_str()})
+    db_add_project({"id": uid(), "user_id": uid_, "name": "My First Project",
+                    "color": "#0052cc", "created_at": now_str()})
 
 # ── Session state ─────────────────────────────────────────────────────────────
 _DEF = {
@@ -392,24 +392,58 @@ with st.sidebar:
     for proj in projects:
         count  = sum(1 for t in all_tasks if t["project_id"]==proj["id"])
         active = st.session_state.current_project==proj["id"] and st.session_state.view=="board"
-        c1, c2 = st.columns([5,1])
+
+        # Confirm-delete state key
+        del_key = f"confirm_del_{proj['id']}"
+        if del_key not in st.session_state:
+            st.session_state[del_key] = False
+
+        c1, c2, c3 = st.columns([5, 1, 1])
         with c1:
             if st.button(f"● {proj['name']}", key=f"pb_{proj['id']}", use_container_width=True,
                          type="primary" if active else "secondary"):
                 st.session_state.current_project = proj["id"]
                 st.session_state.view = "board"
+                st.session_state[del_key] = False
                 st.rerun()
         with c2:
-            st.markdown(f'<div style="text-align:center;font-size:11px;color:#5e6c84;padding-top:8px">{count}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align:center;font-size:11px;color:#5e6c84;padding-top:8px">{count}</div>',
+                        unsafe_allow_html=True)
+        with c3:
+            if st.button("🗑", key=f"del_proj_{proj['id']}", help=f"Delete {proj['name']}"):
+                st.session_state[del_key] = True
+                st.rerun()
+
+        # Confirmation row — appears inline under the project
+        if st.session_state.get(del_key):
+            st.markdown(
+                f'<div style="background:#3d1e1e;border-radius:6px;padding:8px 10px;margin:2px 0 6px;font-size:12px;color:#f28b82">'
+                f'Delete <strong>{proj["name"]}</strong> and all its tasks?'
+                f'</div>', unsafe_allow_html=True)
+            cy, cn = st.columns(2)
+            with cy:
+                if st.button("Yes, delete", key=f"yes_del_{proj['id']}", type="primary"):
+                    # If deleting current project, reset to all
+                    if st.session_state.current_project == proj["id"]:
+                        st.session_state.current_project = "all"
+                    db_delete_project(proj["id"])
+                    st.session_state[del_key] = False
+                    st.rerun()
+            with cn:
+                if st.button("Cancel", key=f"no_del_{proj['id']}"):
+                    st.session_state[del_key] = False
+                    st.rerun()
 
     st.markdown('<hr style="border-color:#2c333a;margin:10px 0">', unsafe_allow_html=True)
     with st.expander("➕  New Project"):
-        pn = st.text_input("Name", key="np_n", placeholder="Project name")
+        pn = st.text_input("Project name", key="np_n", placeholder="e.g. Local SEO Campaign")
         pc = st.color_picker("Color", "#0052cc", key="np_c")
         if st.button("Create Project", type="primary", key="np_btn"):
             if pn.strip():
                 db_add_project({"id":uid(),"user_id":user_id,"name":pn.strip(),"color":pc,"created_at":now_str()})
                 st.rerun()
+            else:
+                st.warning("Please enter a project name.")
 
     st.markdown('<hr style="border-color:#2c333a;margin:10px 0">', unsafe_allow_html=True)
     if st.button("🚪  Sign out", use_container_width=True):
